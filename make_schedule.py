@@ -4,6 +4,8 @@ import argparse
 import os
 import csv
 from collections import defaultdict
+from time import strptime
+from datetime import date
 
 def parse_time(s):
     """Returns seconds from beginning of day. May go into tomorrow slightly"""
@@ -39,32 +41,18 @@ class Schedule:
         self.pieces = []
         self.trip = None
 
+    
+
     def add_time(self, arrival_time):
         i = 0
         for piece in self.pieces:
             start_time, inc, count = piece
 
-            if arrival_time <= start_time:
-                i -= 1
+            if arrival_time < start_time:
                 break
-            
-            i += 1
-
-        if i < 0:
-            self.pieces.insert(0, (arrival_time, 0, 0))
-        elif i >= len(self.pieces):
-            self.pieces.append((arrival_time, 0, 0))
-        else:
-            piece = self.pieces[i]
-            start_time, inc, count = piece
-            
-            diff = arrival_time - start_time
-            if inc == 0:
-                self.pieces[i] = start_time, diff, 1
-            elif diff % inc == 0:
-                self.pieces[i] = start_time, inc, count+1
             else:
-                self.pieces.insert(i+1, (arrival_time, 0, 0))
+                i += 1
+        self.pieces.insert(i, (arrival_time, 0, 0))
 
     def __str__(self):
         ret = ""
@@ -86,6 +74,20 @@ def read_map(path, key):
 
     return ret
 
+def make_days(calendar, service):
+    row = calendar[service]
+    return (int(row["monday"]), int(row["tuesday"]), int(row["wednesday"]), int(row["thursday"]), int(row["friday"]), int(row["saturday"]), int(row["sunday"]))
+
+def duration(calendar, service):
+    row = calendar[service]
+
+    end_tup = strptime(row['end_date'], '%Y%m%d')
+    start_tup = strptime(row['start_date'], '%Y%m%d')
+
+    end = date(end_tup[0], end_tup[1], end_tup[2])
+    start = date(start_tup[0], start_tup[1], start_tup[2])
+    return (end-start).days
+
 def parse(path):
     print "reading routes..."
     routes = read_map(os.path.join(path, "routes.txt"), "route_id")
@@ -96,9 +98,6 @@ def parse(path):
     print "reading calendar..."
     calendar = read_map(os.path.join(path, "calendar.txt"), "service_id")
 
-    calendar_map = defaultdict(dict)
-    for key, value in calendar.iteritems():
-        calendar_map[key] = (int(value["monday"]), int(value["tuesday"]), int(value["wednesday"]), int(value["thursday"]), int(value["friday"]), int(value["saturday"]), int(value["sunday"]))
     
 
     print "reticulating splines..."
@@ -112,7 +111,7 @@ def parse(path):
             if row["stop_sequence"] != "1":
                 continue
             trip = row["trip_id"]
-            key = row["stop_id"], trips[trip]["trip_headsign"], trips[trip]["route_id"], calendar_map[trips[trip]["service_id"]]
+            key = row["stop_id"], trips[trip]["trip_headsign"], trips[trip]["route_id"], trips[trip]["service_id"]
 
             sched = schedule[key]
             sched.trip = trip
@@ -121,12 +120,32 @@ def parse(path):
             sched.add_time(arrival_time)
         
     # mapping of route to list of mappings from directions to a compressed schedule
-    ret = defaultdict(lambda: defaultdict(dict))
+    ret_with_service = defaultdict(lambda: defaultdict(dict))
 
     for key, sched in schedule.iteritems():
         stop, direction, route, service = key
 
-        ret[route][direction][service] = sched
+        ret_with_service[route][direction][service] = sched
+
+    # mapping of route to map of direction to sched
+    ret = defaultdict(lambda: defaultdict(dict))
+    for route, direction_map in ret_with_service.iteritems():
+        for direction, service_map in direction_map.iteritems():
+            m = {}
+            for service, sched in service_map.iteritems():
+                row = calendar[service]
+                tup = make_days(calendar, service)
+
+                if tup not in m:
+                    m[tup] = service
+                elif duration(calendar, m[tup]) < duration(calendar, service):
+                    m[tup] = service
+                #else leave the old one there
+
+            for service, sched in service_map.iteritems():
+                tup = make_days(calendar, service)
+                if m[tup] == service:
+                    ret[route][direction][weekdays_to_name(tup)] = sched
 
     return ret
 
@@ -162,7 +181,7 @@ def main():
         for direction, service_map in direction_map.iteritems():
             print "    Direction: %s" % direction
             for service, sched in service_map.iteritems():
-                print "    Service: %s" % weekdays_to_name(service)
+                print "    Service: %s" % service
                 print "    Schedule: %s" % str(sched)
 
 if __name__ == "__main__":
