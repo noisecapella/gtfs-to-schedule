@@ -54,6 +54,27 @@ class Schedule:
                 i += 1
         self.pieces.insert(i, (arrival_time, 0, 0))
 
+    def compress(self):
+        new_pieces = []
+
+        for piece in self.pieces:
+            start_time, inc, count = piece
+            if len(new_pieces) == 0:
+                new_pieces.append(piece)
+            else:
+                new_start_time, new_inc, new_count = new_pieces[-1]
+                diff = start_time - new_start_time
+                if diff == 0:
+                    pass
+                elif new_count == 0:
+                    new_pieces[-1] = new_start_time, diff, 1
+                elif diff % new_inc == 0:
+                    new_pieces[-1] = new_start_time, new_inc, new_count + 1
+                else:
+                    new_pieces.append(piece)
+
+        self.pieces = new_pieces
+
     def __str__(self):
         ret = ""
 
@@ -126,6 +147,8 @@ def parse(path):
         stop, direction, route, service = key
 
         ret_with_service[route][direction][service] = sched
+
+        sched.compress()
 
     # mapping of route to map of direction to sched
     ret = defaultdict(lambda: defaultdict(dict))
