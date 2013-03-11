@@ -95,6 +95,10 @@ def parse(path):
     trips = read_map(os.path.join(path, "trips.txt"), "trip_id")
     print "reading calendar..."
     calendar = read_map(os.path.join(path, "calendar.txt"), "service_id")
+
+    calendar_map = defaultdict(dict)
+    for key, value in calendar.iteritems():
+        calendar_map[key] = (int(value["monday"]), int(value["tuesday"]), int(value["wednesday"]), int(value["thursday"]), int(value["friday"]), int(value["saturday"]), int(value["sunday"]))
     
 
     print "reticulating splines..."
@@ -108,7 +112,7 @@ def parse(path):
             if row["stop_sequence"] != "1":
                 continue
             trip = row["trip_id"]
-            key = row["stop_id"], trips[trip]["trip_headsign"], trips[trip]["route_id"], trips[trip]["service_id"]
+            key = row["stop_id"], trips[trip]["trip_headsign"], trips[trip]["route_id"], calendar_map[trips[trip]["service_id"]]
 
             sched = schedule[key]
             sched.trip = trip
@@ -125,6 +129,21 @@ def parse(path):
         ret[route][direction][service] = sched
 
     return ret
+
+def weekdays_to_name(weekdays):
+    all_weekdays = weekdays[0] and weekdays[1] and weekdays[2] and weekdays[3] and weekdays[4]
+
+    if all_weekdays:
+        return "All weekdays"
+
+    else:
+        array = []
+        days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+        for i, value in enumerate(weekdays):
+            if value:
+                array.append(days[i])
+
+        return ", ".join(array)
 
 def main():
     parser = argparse.ArgumentParser(description='Parses GTFS data into general schedule')
@@ -143,7 +162,7 @@ def main():
         for direction, service_map in direction_map.iteritems():
             print "    Direction: %s" % direction
             for service, sched in service_map.iteritems():
-                print "    Service: %s" % service
+                print "    Service: %s" % weekdays_to_name(service)
                 print "    Schedule: %s" % str(sched)
 
 if __name__ == "__main__":
