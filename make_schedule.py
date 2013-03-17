@@ -3,7 +3,7 @@
 import argparse
 import os
 import csv
-from collections import defaultdict
+from collections import defaultdict, OrderedDict
 from time import strptime
 from datetime import date
 
@@ -36,12 +36,71 @@ def time_to_string(time):
     return "%02d:%02d:%02d" % (hour,minute,second)
 
 class Schedule:
-    """A compressed schedule"""
+    def __init__(self):
+        self.schedules = {}
+        self.stops = OrderedDict()
+
+    def add_time(self, arrival_time, stop):
+        if stop not in self.stops:
+            self.stops[stop] = True
+            self.schedules[stop] = StopSchedule()
+
+        self.schedules[stop].add_time(arrival_time)
+
+    def compress(self):
+        # if schedule is exactly some number of minutes different from previous
+        # replace with number
+
+        prev_sched = None
+        for stop, _ in self.stops.iteritems():
+            current_sched = self.schedules[stop]
+            current_sched.compress()
+            if prev_sched:
+                diff = prev_sched.diff(current_sched)
+                if diff != None:
+                    self.schedules[stop] = diff
+
+            prev_sched = current_sched
+
+    def __str__(self):
+        ret = ""
+
+        for stop, _ in self.stops.iteritems():
+            current_sched = self.schedules[stop]
+            if type(current_sched) == int:
+                if current_sched % 60 == 0:
+                    ret += "     whole schedules is exactly %d minutes from previous\n" % (current_sched/60)
+                else:
+                    ret += "     whole schedules is exactly %d seconds from previous\n" % (current_sched)
+            else:
+                ret += current_sched
+
+        return ret
+
+            
+class StopSchedule:
+    """A compressed schedule for a stop"""
     def __init__(self):
         self.pieces = []
         self.trip = None
 
-    
+    def diff(self, next_sched):
+        if len(next_sched.pieces) != len(self.pieces):
+            return None
+
+        current_diff = None
+        for i, piece in enumerate(self.pieces):
+            start_time, inc, count = piece
+
+            next_start_time, next_inc, next_count = next_sched.pieces[i]
+
+            if next_inc == inc and next_count == count:
+                diff = next_start_time - start_time
+                if current_diff == None:
+                    current_diff = diff
+                elif current_diff != diff:
+                    return None
+        return current_diff
 
     def add_time(self, arrival_time):
         i = 0
@@ -109,6 +168,34 @@ def duration(calendar, service):
     start = date(start_tup[0], start_tup[1], start_tup[2])
     return (end-start).days
 
+def convert_service_to_weekdays(ret_with_service, calendar):
+    """this block of code converts service to a tuple of weekdays"""
+
+
+
+    # mapping of route to map of direction to sched
+    ret_with_stops = defaultdict(lambda: defaultdict(dict))
+    for route, direction_map in ret_with_service.iteritems():
+        for direction, service_map in direction_map.iteritems():
+            # mapping of weekdays to service
+            m = {}
+            for service, _ in service_map.iteritems():
+                # make sure service we choose is the one of maximum duration
+                row = calendar[service]
+                tup = make_days(calendar, service)
+
+                if tup not in m:
+                    m[tup] = service
+                elif duration(calendar, m[tup]) < duration(calendar, service):
+                    m[tup] = service
+                #else leave the old one there
+
+            for service, sched in service_map.iteritems():
+                tup = make_days(calendar, service)
+                if m[tup] == service:
+                    ret_with_stops[route][direction][weekdays_to_name(tup)] = sched
+    return ret_with_stops
+
 def parse(path):
     print "reading routes..."
     routes = read_map(os.path.join(path, "routes.txt"), "route_id")
@@ -130,48 +217,25 @@ def parse(path):
 
         for row in reader:
             trip = row["trip_id"]
-            key = row["stop_id"], trips[trip]["trip_headsign"], trips[trip]["route_id"], trips[trip]["service_id"]
+            key = trips[trip]["trip_headsign"], trips[trip]["route_id"], trips[trip]["service_id"]
 
             sched = schedule[key]
             sched.trip = trip
 
             arrival_time = parse_time(row["arrival_time"])
-            sched.add_time(arrival_time)
+            sched.add_time(arrival_time, row["stop_id"])
         
     # mapping of route to list of mappings from directions to a compressed schedule
-    ret_with_service = defaultdict(lambda: defaultdict(lambda: defaultdict(dict)))
+    ret_with_service = defaultdict(lambda: defaultdict(dict))
 
     for key, sched in schedule.iteritems():
-        stop, direction, route, service = key
+        direction, route, service = key
 
-        ret_with_service[route][direction][service][stop] = sched
+        ret_with_service[route][direction][service] = sched
 
         sched.compress()
 
-    ### this block of code converts service to a tuple of weekdays
-
-    # mapping of route to map of direction to sched
-    ret = defaultdict(lambda: defaultdict(lambda: defaultdict(dict)))
-    for route, direction_map in ret_with_service.iteritems():
-        for direction, service_map in direction_map.iteritems():
-            # mapping of weekdays to service
-            m = {}
-            for service, _ in service_map.iteritems():
-                # make sure service we choose is the one of maximum duration
-                row = calendar[service]
-                tup = make_days(calendar, service)
-
-                if tup not in m:
-                    m[tup] = service
-                elif duration(calendar, m[tup]) < duration(calendar, service):
-                    m[tup] = service
-                #else leave the old one there
-
-            for service, stop_map in service_map.iteritems():
-                for stop, sched in stop_map.iteritems():
-                    tup = make_days(calendar, service)
-                    if m[tup] == service:
-                        ret[route][direction][weekdays_to_name(tup)][stop] = sched
+    ret = convert_service_to_weekdays(ret_with_service, calendar)
 
     return ret
 
