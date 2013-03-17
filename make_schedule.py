@@ -69,11 +69,11 @@ class Schedule:
             current_sched = self.schedules[stop]
             if type(current_sched) == int:
                 if current_sched % 60 == 0:
-                    ret += "     whole schedules is exactly %d minutes from previous\n" % (current_sched/60)
+                    ret += "     whole schedules for '%s' is exactly %d minutes from previous\n" % (stop, current_sched/60)
                 else:
-                    ret += "     whole schedules is exactly %d seconds from previous\n" % (current_sched)
+                    ret += "     whole schedules for '%s' is exactly %d seconds from previous\n" % (stop, current_sched)
             else:
-                ret += str(current_sched)
+                ret += ("    Stop: %s\n" % stop) + str(current_sched)
 
         return ret
 
