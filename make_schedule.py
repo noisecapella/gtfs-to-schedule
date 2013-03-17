@@ -270,11 +270,9 @@ def main():
         print "Route: %s" % route
         for direction, service_map in direction_map.iteritems():
             print "    Direction: %s" % direction
-            for service, stop_map in service_map.iteritems():
-                for stop, sched in stop_map.iteritems():
-                    print "    Service: %s" % service
-                    print "    Stop: %s" % stop
-                    print "    Schedule: %s" % str(sched)
+            for service, sched in service_map.iteritems():
+                print "    Service: %s" % service
+                print "    Schedule: %s" % str(sched)
 
 if __name__ == "__main__":
     main()
