@@ -73,7 +73,7 @@ class Schedule:
                 else:
                     ret += "     whole schedules is exactly %d seconds from previous\n" % (current_sched)
             else:
-                ret += current_sched
+                ret += str(current_sched)
 
         return ret
 
