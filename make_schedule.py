@@ -35,15 +35,40 @@ def time_to_string(time):
 
     return "%02d:%02d:%02d" % (hour,minute,second)
 
+def same(l):
+    if len(l) == 0:
+        return True
+    item = l[0]
+    for each in l:
+        if item != each:
+            return False
+
+    return True
+
+def diff_as_string(x):
+    if len(x) == 0:
+        raise Exception("empty list")
+    elif len(x) == 1:
+        if x[0] % 60 == 0:
+            return "%s minutes" % str(x[0]/60)
+        else:
+            return "%s seconds" % str(x[0])
+    else:
+        if len(filter(lambda z: z % 60 == 0, x)) == len(x):
+            return str([each/60 for each in x])
+        else:
+            return str(x)
+
 class Schedule:
     def __init__(self):
         self.schedules = {}
         self.stops = OrderedDict()
+        self.schedule_groups = {}
 
     def add_time(self, arrival_time, stop):
         if stop not in self.stops:
             self.stops[stop] = True
-            self.schedules[stop] = StopSchedule()
+            self.schedules[stop] = StopSchedule(stop)
 
         self.schedules[stop].add_time(arrival_time)
 
@@ -55,23 +80,22 @@ class Schedule:
         for stop, _ in self.stops.iteritems():
             current_sched = self.schedules[stop]
             current_sched.compress()
-            if prev_sched:
+            for schedule_group_stop, prev_sched in self.schedule_groups.iteritems():
                 diff = prev_sched.diff(current_sched)
                 if diff != None:
-                    self.schedules[stop] = diff
-
-            prev_sched = current_sched
+                    self.schedules[stop] = (prev_sched, diff)
+                    break
+            else:
+                self.schedule_groups[stop] = current_sched
 
     def __str__(self):
         ret = ""
 
         for stop, _ in self.stops.iteritems():
             current_sched = self.schedules[stop]
-            if type(current_sched) == int:
-                if current_sched % 60 == 0:
-                    ret += "     whole schedules for '%s' is exactly %d minutes from previous\n" % (stop, current_sched/60)
-                else:
-                    ret += "     whole schedules for '%s' is exactly %d seconds from previous\n" % (stop, current_sched)
+            if type(current_sched) == tuple:
+                prev_sched, diff = current_sched
+                ret += "     whole schedules for '%s' is exactly %s from '%s'\n" % (stop, diff_as_string(diff), prev_sched.stop)
             else:
                 ret += ("    Stop: %s\n" % stop) + str(current_sched)
 
@@ -80,9 +104,10 @@ class Schedule:
             
 class StopSchedule:
     """A compressed schedule for a stop"""
-    def __init__(self):
+    def __init__(self, stop):
         self.pieces = []
         self.trip = None
+        self.stop = stop
 
     def diff(self, next_sched):
         if len(next_sched.pieces) != len(self.pieces):
@@ -97,9 +122,11 @@ class StopSchedule:
             if next_inc == inc and next_count == count:
                 diff = next_start_time - start_time
                 if current_diff == None:
-                    current_diff = diff
-                elif current_diff != diff:
-                    return None
+                    current_diff = [diff]
+                else:
+                    current_diff.append(diff)
+            else:
+                return None
         return current_diff
 
     def add_time(self, arrival_time):
