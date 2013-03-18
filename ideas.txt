@@ -1,0 +1,28 @@
+Database format:
+
+- service table: service_id, day of week hash, start day of service, end day of service
+- schedule table: schedule_id, direction heading, service_id
+- stop_schedule table: stop_schedule id, schedule_id, stop id
+- stop_schedule row table: stop_schedule id, start time, repeats, diff in seconds
+- stop_schedule duplicate table: other stop_schedule_id, stop id, diff id
+- diff table: diff id, order, diff number #maybe add extra columns here if necessary
+
+Questions:
+
+- given a stop id and a time during the week, what are the next arrivals?
+
+Pseudo-code:
+
+- select schedules where service is active according to today's date
+- join stop_schedules where stop id == stop and schedule id == schedule
+
+- join stop_schedule row table on stop_schedule id = stop_schedules
+- store row tables in memory
+
+- then, join stop_schedule duplicate table on stop_schedule id = stop_schedules
+- join diff on diff.id = stop_schedule diff id
+
+- at this point, how many rows are we looking at? are the joins computationally intensive?
+
+- for each row table in memory, is there any event which occurs within 90 minutes from present time?
+- for each duplicate, construct new row table object from diff. look at these events too.
