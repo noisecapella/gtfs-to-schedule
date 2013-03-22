@@ -262,9 +262,9 @@ def parse(path):
 
         sched.compress()
 
-    ret = convert_service_to_weekdays(ret_with_service, calendar)
+    #ret = convert_service_to_weekdays(ret_with_service, calendar)
 
-    return ret
+    return ret_with_service
 
 def weekdays_to_name(weekdays):
     all_weekdays = weekdays[0] and weekdays[1] and weekdays[2] and weekdays[3] and weekdays[4]
