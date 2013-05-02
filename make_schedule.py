@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 import argparse
 import os
@@ -7,7 +7,12 @@ from collections import defaultdict, OrderedDict
 from time import strptime
 from datetime import date
 
-def parse_time(s):
+from schedules import (
+    Schedule,
+    StopSchedule,
+)
+
+def parse_time(s: str) -> int:
     """Returns seconds from beginning of day. May go into tomorrow slightly"""
     hour, minute, second = s.split(":")
     hour = int(hour)
@@ -22,155 +27,8 @@ def parse_time(s):
 
     return second + 60*minute + 60*60*hour + 24*60*60*day
 
-def time_to_string(time):
-    """Seconds from beginning of day to string"""
 
-    hour = time / (60*60)
-    time -= hour*60*60
-
-    minute = time/60
-    time -= minute*60
-
-    second = time
-
-    return "%02d:%02d:%02d" % (hour,minute,second)
-
-def same(l):
-    if len(l) == 0:
-        return True
-    item = l[0]
-    for each in l:
-        if item != each:
-            return False
-
-    return True
-
-def diff_as_string(x):
-    if len(x) == 0:
-        raise Exception("empty list")
-    elif len(x) == 1:
-        if x[0] % 60 == 0:
-            return "%s minutes" % str(x[0]/60)
-        else:
-            return "%s seconds" % str(x[0])
-    else:
-        if len(filter(lambda z: z % 60 == 0, x)) == len(x):
-            return str([each/60 for each in x])
-        else:
-            return str(x)
-
-class Schedule:
-    def __init__(self):
-        self.schedules = {}
-        self.stops = OrderedDict()
-        self.schedule_groups = {}
-
-    def add_time(self, arrival_time, stop):
-        if stop not in self.stops:
-            self.stops[stop] = True
-            self.schedules[stop] = StopSchedule(stop)
-
-        self.schedules[stop].add_time(arrival_time)
-
-    def compress(self):
-        # if schedule is exactly some number of minutes different from previous
-        # replace with number
-
-        prev_sched = None
-        for stop, _ in self.stops.iteritems():
-            current_sched = self.schedules[stop]
-            current_sched.compress()
-            for schedule_group_stop, prev_sched in self.schedule_groups.iteritems():
-                diff = prev_sched.diff(current_sched)
-                if diff != None:
-                    self.schedules[stop] = (prev_sched, diff)
-                    break
-            else:
-                self.schedule_groups[stop] = current_sched
-
-    def __str__(self):
-        ret = ""
-
-        for stop, _ in self.stops.iteritems():
-            current_sched = self.schedules[stop]
-            if type(current_sched) == tuple:
-                prev_sched, diff = current_sched
-                ret += "     whole schedules for '%s' is exactly %s from '%s'\n" % (stop, diff_as_string(diff), prev_sched.stop)
-            else:
-                ret += ("    Stop: %s\n" % stop) + str(current_sched)
-
-        return ret
-
-            
-class StopSchedule:
-    """A compressed schedule for a stop"""
-    def __init__(self, stop):
-        self.pieces = []
-        self.trip = None
-        self.stop = stop
-
-    def diff(self, next_sched):
-        if len(next_sched.pieces) != len(self.pieces):
-            return None
-
-        current_diff = None
-        for i, piece in enumerate(self.pieces):
-            start_time, inc, count = piece
-
-            next_start_time, next_inc, next_count = next_sched.pieces[i]
-
-            if next_inc == inc and next_count == count:
-                diff = next_start_time - start_time
-                if current_diff == None:
-                    current_diff = [diff]
-                else:
-                    current_diff.append(diff)
-            else:
-                return None
-        return current_diff
-
-    def add_time(self, arrival_time):
-        i = 0
-        for piece in self.pieces:
-            start_time, inc, count = piece
-
-            if arrival_time < start_time:
-                break
-            else:
-                i += 1
-        self.pieces.insert(i, (arrival_time, 0, 0))
-
-    def compress(self):
-        new_pieces = []
-
-        for piece in self.pieces:
-            start_time, inc, count = piece
-            if len(new_pieces) == 0:
-                new_pieces.append(piece)
-            else:
-                new_start_time, new_inc, new_count = new_pieces[-1]
-                diff = start_time - new_start_time
-                if diff == 0:
-                    pass
-                elif new_count == 0:
-                    new_pieces[-1] = new_start_time, diff, 1
-                elif diff % new_inc == 0:
-                    new_pieces[-1] = new_start_time, new_inc, new_count + 1
-                else:
-                    new_pieces.append(piece)
-
-        self.pieces = new_pieces
-
-    def __str__(self):
-        ret = ""
-
-        for piece in self.pieces:
-            start_time, inc, count = piece
-            ret += "        start at %s, repeat every %d minutes %d times\n" % (time_to_string(start_time), inc/60, count) 
-
-        return ret
-
-def read_map(path, key):
+def read_map(path: str, key: str) -> dict:
     ret = {}
 
     with open(path) as f:
@@ -181,9 +39,18 @@ def read_map(path, key):
 
     return ret
 
-def make_days(calendar, service):
+def make_days(calendar, service) -> tuple:
     row = calendar[service]
-    return (int(row["monday"]), int(row["tuesday"]), int(row["wednesday"]), int(row["thursday"]), int(row["friday"]), int(row["saturday"]), int(row["sunday"]))
+    return int(row["monday"]), int(row["tuesday"]), int(row["wednesday"]), int(row["thursday"]), int(row["friday"]), int(row["saturday"]), int(row["sunday"])
+
+def make_days_hash(arr):
+    """Inputs array of seven days, starting with Monday, where value is 1 or 0. Returns integer of equivalent bits"""
+    ret = 0
+    for i in range(len(arr)):
+        if arr[i]:
+            ret |= 2**i
+
+    return ret
 
 def duration(calendar, service):
     row = calendar[service]
@@ -224,18 +91,18 @@ def convert_service_to_weekdays(ret_with_service, calendar):
     return ret_with_stops
 
 def parse(path):
-    print "reading routes..."
+    print("reading routes...")
     routes = read_map(os.path.join(path, "routes.txt"), "route_id")
-    print "reading stops..."
+    print("reading stops...")
     stops = read_map(os.path.join(path, "stops.txt"), "stop_id")
-    print "reading trips..."
+    print("reading trips...")
     trips = read_map(os.path.join(path, "trips.txt"), "trip_id")
-    print "reading calendar..."
+    print("reading calendar...")
     calendar = read_map(os.path.join(path, "calendar.txt"), "service_id")
 
     
 
-    print "reticulating splines..."
+    print("reticulating splines...")
     # mapping of (stop, direction) to list of (start_time, increment, count)
     schedule = defaultdict(Schedule)
 
@@ -252,10 +119,10 @@ def parse(path):
             arrival_time = parse_time(row["arrival_time"])
             sched.add_time(arrival_time, row["stop_id"])
         
-    # mapping of route to list of mappings from directions to a compressed schedule
+    # mapping route -> direction -> service -> sched
     ret_with_service = defaultdict(lambda: defaultdict(dict))
 
-    for key, sched in schedule.iteritems():
+    for key, sched in schedule.items():
         direction, route, service = key
 
         ret_with_service[route][direction][service] = sched
@@ -264,9 +131,9 @@ def parse(path):
 
     #ret = convert_service_to_weekdays(ret_with_service, calendar)
 
-    return ret_with_service
+    return ret_with_service, trips, calendar
 
-def weekdays_to_name(weekdays):
+def weekdays_to_name(weekdays: tuple) -> str:
     all_weekdays = weekdays[0] and weekdays[1] and weekdays[2] and weekdays[3] and weekdays[4]
 
     if all_weekdays:
@@ -284,6 +151,7 @@ def weekdays_to_name(weekdays):
 def main():
     parser = argparse.ArgumentParser(description='Parses GTFS data into general schedule')
     parser.add_argument('path', help='Path of directory containing GTFS data')
+    parser.add_argument('output_file', help='File to output schedule to')
 
     args = parser.parse_args()
 
@@ -291,15 +159,23 @@ def main():
         print("%s is not a valid directory" % args.path)
         exit(-1)
 
-    schedule = parse(args.path)
+    if os.path.exists(args.output_file):
+        print("Output file %s exists, please delete and try again if this is what you want" % args.output_file)
+        exit(-1)
 
-    for route, direction_map in schedule.iteritems():
-        print "Route: %s" % route
-        for direction, service_map in direction_map.iteritems():
-            print "    Direction: %s" % direction
-            for service, sched in service_map.iteritems():
-                print "    Service: %s" % service
-                print "    Schedule: %s" % str(sched)
+    with open(args.output_file, "w") as f:
+        # test that we can write
+        f.write("\n")
+
+        schedule, trips, calendar = parse(args.path)
+
+        for route, direction_map in schedule.items():
+            f.write("Route: %s\n" % route)
+            for direction, service_map in direction_map.items():
+                f.write("    Direction: %s\n" % direction)
+                for service, sched in service_map.items():
+                    f.write("    Service: %s\n" % service)
+                    f.write("    Schedule: %s\n" % str(sched))
 
 if __name__ == "__main__":
     main()
