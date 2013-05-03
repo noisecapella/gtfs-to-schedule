@@ -69,11 +69,11 @@ def convert_service_to_weekdays(ret_with_service, calendar):
 
     # mapping of route to map of direction to sched
     ret_with_stops = defaultdict(lambda: defaultdict(dict))
-    for route, direction_map in ret_with_service.iteritems():
-        for direction, service_map in direction_map.iteritems():
+    for route, direction_map in ret_with_service.items():
+        for direction, service_map in direction_map.items():
             # mapping of weekdays to service
             m = {}
-            for service, _ in service_map.iteritems():
+            for service, _ in service_map.items():
                 # make sure service we choose is the one of maximum duration
                 row = calendar[service]
                 tup = make_days(calendar, service)
@@ -84,7 +84,7 @@ def convert_service_to_weekdays(ret_with_service, calendar):
                     m[tup] = service
                 #else leave the old one there
 
-            for service, sched in service_map.iteritems():
+            for service, sched in service_map.items():
                 tup = make_days(calendar, service)
                 if m[tup] == service:
                     ret_with_stops[route][direction][weekdays_to_name(tup)] = sched

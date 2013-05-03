@@ -18,6 +18,11 @@ class Box:
     def add_int(self, x):
         self.bytes += binascii.b2a_hex(struct.pack('>i', x))
 
+    def add_ints(self, ints):
+        self.add_int(len(ints))
+        for i in ints:
+            self.add_int(i)
+
     def add_float(self, f):
         self.bytes += binascii.b2a_hex(struct.pack('>f', f))
 

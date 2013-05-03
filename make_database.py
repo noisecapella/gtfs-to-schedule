@@ -4,6 +4,8 @@ from make_schedule import parse
 import argparse
 import os
 
+from box import Box
+
 from make_schedule import (
     make_days,
     make_days_hash,
@@ -34,6 +36,7 @@ def print_schedule_table(f, schedule, service_ids, direction_ids):
     f.write("CREATE TABLE IF NOT EXISTS schedule (id INTEGER PRIMARY KEY, direction_id INTEGER, service_id INTEGER)\n")
 
     count = 0
+    schedule_ids = {}
     for route, direction_map in schedule.items():
         for direction, service_map in direction_map.items():
             for service, sched in service_map.items():
@@ -42,8 +45,9 @@ def print_schedule_table(f, schedule, service_ids, direction_ids):
 
                 f.write("INSERT INTO schedule VALUES (%d, %d, %d)\n" %
                         (count, direction_id, service_id))
+                schedule_ids[(route, direction, service)] = count
                 count += 1
-
+    return schedule_ids
 
 def escaped(s):
     return s.replace("'", "''")
@@ -63,8 +67,8 @@ def print_direction_table(f, schedule):
     return direction_ids
 
 
-def print_stop_schedule_table(f, schedule, service_ids):
-    f.write("CREATE TABLE IF NOT EXISTS stop_schedule (id INTEGER PRIMARY KEY, schedule_id INTEGER, stop_id STRING)\n")
+def print_stop_schedule_table(f, schedule, schedule_ids):
+    f.write("CREATE TABLE IF NOT EXISTS stop_schedule (id INTEGER PRIMARY KEY, service_id INTEGER, stop_id STRING)\n")
     count = 0
 
     stop_schedule_ids = {}
@@ -72,7 +76,8 @@ def print_stop_schedule_table(f, schedule, service_ids):
         for direction, service_map in direction_map.items():
             for service, sched in service_map.items():
                 for stop in sched.stops:
-                    f.write("INSERT INTO stop_schedule VALUES (%d, %d, %s)\n" % (count, service_ids[service], stop))
+                    sched_key = (route, direction, service)
+                    f.write("INSERT INTO stop_schedule VALUES (%d, %d, %s)\n" % (count, schedule_ids[sched_key], stop))
                     stop_schedule_ids[(service, stop)] = count
 
                     count += 1
@@ -85,24 +90,24 @@ def print_stop_schedule_row_table(f, schedule, stop_schedule_ids):
             " INTEGER, start_time INTEGER, repeats INTEGER, diff INTEGER)\n")
 
     count = 0
-    stop_schedule_row_ids = {}
     for route, direction_map in schedule.items():
         for direction, service_map in direction_map.items():
             for service, sched in service_map.items():
                 for stop in sched.stops:
                     stop_schedule_or_diff = sched.schedules[stop]
                     if type(stop_schedule_or_diff) == StopSchedule:
+                        stop_schedule_id = stop_schedule_ids[(service, stop)]
                         for piece in stop_schedule_or_diff.pieces:
                             arrival_time, diff, repeat_count = piece
-                            stop_schedule_id = stop_schedule_ids[(service, stop)]
                             f.write("INSERT INTO stop_schedule_row VALUES (%d, %d, %d, %d)\n" %
                                     (stop_schedule_id, arrival_time, diff, repeat_count))
                             count += 1
                     # else it's a duplicate, handle in print_schedule_duplicate_table
 
 
-def print_stop_schedule_duplicate_table(f, schedule):
-    f.write("CREATE TABLE IF NOT EXISTS stop_schedule_duplicate (stop_schedule_id INTEGER, diff INTEGER)\n")
+def print_stop_schedule_duplicate_table(f, schedule, stop_schedule_ids, schedule_ids, diff_ids):
+    f.write("CREATE TABLE IF NOT EXISTS stop_schedule_duplicate (id INTEGER PRIMARY KEY,"
+            " schedule_id INTEGER, diff INTEGER)\n")
     # TODO: whole schedule for first stop is exactly d seconds from this stop
     count = 0
     for route, direction_map in schedule.items():
@@ -112,12 +117,34 @@ def print_stop_schedule_duplicate_table(f, schedule):
                     stop_schedule_or_diff = sched.schedules[stop]
                     if type(stop_schedule_or_diff) == tuple:
                         prev_sched, diff = stop_schedule_or_diff
-                        raise "TODO"
+                        stop_schedule_id = stop_schedule_ids[(service, stop)]
+                        schedule_id = schedule_ids[(route, direction, service)]
+                        diff_id = diff_ids[tuple(diff)]
+                        f.write("INSERT INTO stop_schedule_duplicate VALUES (%d, %d, %d)\n" %
+                                (stop_schedule_id, schedule_id, diff_id))
                     # else it's not a duplicate
 
 
 def print_diff_table(f, schedule):
-    f.write("CREATE TABLE IF NOT EXISTS diff (diff_id INTEGER, n1 INTEGER, n2 INTEGER, ...)\n")
+    diff_ids = {}
+    count = 0
+    f.write("CREATE TABLE IF NOT EXISTS diff (diff_id INTEGER, diff BLOB)\n")
+    for route, direction_map in schedule.items():
+        for direction, service_map in direction_map.items():
+            for service, sched in service_map.items():
+                for stop in sched.stops:
+                    stop_schedule_or_diff = sched.schedules[stop]
+                    if type(stop_schedule_or_diff) == tuple:
+                        prev_sched, diff = stop_schedule_or_diff
+                        diff_key = tuple(diff)
+                        if diff_key not in diff_ids:
+                            diff_ids[diff_key] = count
+                            box = Box()
+                            box.add_ints(diff)
+                            count += 1
+                            f.write("INSERT INTO diff VALUES (%d, %s)" %
+                                    count, box.get_blob_string())
+    return diff_ids
 
 
 def print_trip_table(f, schedule):
@@ -146,11 +173,11 @@ def main():
 
         service_ids = print_service_table(f, calendar)
         direction_ids = print_direction_table(f, schedule)
-        print_schedule_table(f, schedule, service_ids, direction_ids)
-        stop_schedule_ids = print_stop_schedule_table(f, schedule, service_ids)
+        schedule_ids = print_schedule_table(f, schedule, service_ids, direction_ids)
+        stop_schedule_ids = print_stop_schedule_table(f, schedule, schedule_ids)
         print_stop_schedule_row_table(f, schedule, stop_schedule_ids)
-        print_stop_schedule_duplicate_table(f, schedule)
-        print_diff_table(f, schedule)
+        diff_ids = print_diff_table(f, schedule)
+        print_stop_schedule_duplicate_table(f, schedule, diff_ids)
 
 if __name__ == "__main__":
     main()
