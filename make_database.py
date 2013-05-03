@@ -142,7 +142,7 @@ def print_diff_table(f, schedule):
                             box = Box()
                             box.add_ints(diff)
                             count += 1
-                            f.write("INSERT INTO diff VALUES (%d, %s)" %
+                            f.write("INSERT INTO diff VALUES (%d, %s)\n" %
                                     count, box.get_blob_string())
     return diff_ids
 
