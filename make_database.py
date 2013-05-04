@@ -143,7 +143,7 @@ def print_diff_table(f, schedule):
                             box.add_ints(diff)
                             count += 1
                             f.write("INSERT INTO diff VALUES (%d, %s)\n" %
-                                    count, box.get_blob_string())
+                                    (count, box.get_blob_string()))
     return diff_ids
 
 
@@ -177,7 +177,7 @@ def main():
         stop_schedule_ids = print_stop_schedule_table(f, schedule, schedule_ids)
         print_stop_schedule_row_table(f, schedule, stop_schedule_ids)
         diff_ids = print_diff_table(f, schedule)
-        print_stop_schedule_duplicate_table(f, schedule, diff_ids)
+        print_stop_schedule_duplicate_table(f, schedule, stop_schedule_ids, schedule_ids, diff_ids)
 
 if __name__ == "__main__":
     main()
