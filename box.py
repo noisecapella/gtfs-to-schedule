@@ -16,7 +16,7 @@ class Box:
         self.bytes = "" # this is hex
 
     def add_int(self, x):
-        self.bytes += binascii.b2a_hex(struct.pack('>i', x))
+        self.bytes += self.to_str(binascii.b2a_hex(struct.pack('>i', x)))
 
     def add_ints(self, ints):
         self.add_int(len(ints))
@@ -24,7 +24,10 @@ class Box:
             self.add_int(i)
 
     def add_float(self, f):
-        self.bytes += binascii.b2a_hex(struct.pack('>f', f))
+        self.bytes += self.to_str(binascii.b2a_hex(struct.pack('>f', f)))
+
+    def to_str(self, b):
+        return b.decode("utf-8")
 
     def get_blob_string(self):
         return "X'" + self.bytes + "'"
