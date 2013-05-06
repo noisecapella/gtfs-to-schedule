@@ -79,7 +79,7 @@ def print_stop_schedule_table(f, schedule, schedule_ids):
                     sched_key = (route, direction, service)
                     f.write("INSERT INTO stop_schedule VALUES (%d, %d, '%s');\n" %
                             (count, schedule_ids[sched_key], escaped(stop)))
-                    stop_schedule_ids[(service, stop)] = count
+                    stop_schedule_ids[(route, direction, service, stop)] = count
 
                     count += 1
 
@@ -97,7 +97,7 @@ def print_stop_schedule_row_table(f, schedule, stop_schedule_ids):
                 for stop in sched.stops:
                     stop_schedule_or_diff = sched.schedules[stop]
                     if type(stop_schedule_or_diff) == StopSchedule:
-                        stop_schedule_id = stop_schedule_ids[(service, stop)]
+                        stop_schedule_id = stop_schedule_ids[(route, direction, service, stop)]
                         for piece in stop_schedule_or_diff.pieces:
                             arrival_time, diff, repeat_count = piece
                             f.write("INSERT INTO stop_schedule_row VALUES (%d, %d, %d, %d);\n" %
@@ -118,7 +118,7 @@ def print_stop_schedule_duplicate_table(f, schedule, stop_schedule_ids, schedule
                     stop_schedule_or_diff = sched.schedules[stop]
                     if type(stop_schedule_or_diff) == tuple:
                         prev_sched, diff = stop_schedule_or_diff
-                        stop_schedule_id = stop_schedule_ids[(service, stop)]
+                        stop_schedule_id = stop_schedule_ids[(route, direction, service, stop)]
                         schedule_id = schedule_ids[(route, direction, service)]
                         diff_id = diff_ids[tuple(diff)]
                         f.write("INSERT INTO stop_schedule_duplicate VALUES (%d, %d, %d);\n" %
@@ -169,8 +169,7 @@ def main():
         exit(-1)
 
     with open(args.output_file, "w") as f:
-        # test that f is writable
-        f.write("\n")
+        f.write("BEGIN TRANSACTION;\n")
         schedule, trips, calendar = parse(args.path)
 
         service_ids = print_service_table(f, calendar)
@@ -180,6 +179,8 @@ def main():
         print_stop_schedule_row_table(f, schedule, stop_schedule_ids)
         diff_ids = print_diff_table(f, schedule)
         print_stop_schedule_duplicate_table(f, schedule, stop_schedule_ids, schedule_ids, diff_ids)
+
+        f.write("END TRANSACTION;\n")
 
 if __name__ == "__main__":
     main()
