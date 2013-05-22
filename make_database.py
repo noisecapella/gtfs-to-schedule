@@ -24,11 +24,6 @@ def escaped(s):
     return s.replace("'", "''")
 
 
-def print_stop_times_table(f, stop_times):
-    for trip_id, stop_times_map in stop_times.items():
-        for stop_id, times_tuple in stop_times_map.items():
-            arrival_seconds, depart_seconds = times_tuple
-
 
 
 def make_index_map(array):
@@ -102,7 +97,7 @@ def compress_stop_times_table(stop_times):
     arrivals_map = {}
     arrivals_reverse_map = {}
     for trip_id, stop_lst in stop_times.items():
-        min_seconds = 0
+        min_seconds = 48 * 60 * 60
         for tup in stop_lst:
             stop_id, arrival_seconds, depart_seconds = tup
             min_seconds = min(min_seconds, arrival_seconds, depart_seconds)
