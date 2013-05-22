@@ -71,9 +71,10 @@ def write_trip_ids_table(out_file, csv_path):
             count += 1
     return ret
 
-def write_stop_times_table(out_file, csv_path, stop_id_map, trip_id_map):
-    out_file.write("CREATE TABLE stop_times (trip_id INTEGER, stop_id INTEGER, "
-                   "arrival_seconds INTEGER, depart_seconds INTEGER);\n")
+def read_stop_times_table(csv_path):
+    # returns trip_id -> [(stop_id, arrival, departure), etc...]
+    ret = defaultdict(list)
+
     with open(csv_path) as csv_file:
         reader = csv.reader(csv_file)
 
@@ -84,10 +85,53 @@ def write_stop_times_table(out_file, csv_path, stop_id_map, trip_id_map):
             arrival_seconds = parse_time(row[header["arrival_time"]])
             departure_seconds = parse_time(row[header["departure_time"]])
 
-            out_file.write("INSERT INTO stop_times VALUES (%d, %d, %d, %d);\n" % (
-                trip_id_map[trip_id], stop_id_map[stop_id], arrival_seconds, departure_seconds
-            ))
+            m = ret[trip_id]
+            if stop_id in m:
+                raise Exception("Stop id %s specified twice for a given trip %s" % (stop_id, trip_id))
+            tup = stop_id, arrival_seconds, departure_seconds
+            m.append(tup)
+    return ret
 
+
+def compress_stop_times_table(stop_times):
+    # stop_times is return value of read_stop_times_table
+    # returns (arrivals_map, trip_id -> (seconds, Arrivals))
+    # where arrivals_map is arrival_id -> Arrival
+
+    ret = {}
+    arrivals_map = {}
+    arrivals_reverse_map = {}
+    for trip_id, stop_lst in stop_times.items():
+        min_seconds = 0
+        for tup in stop_lst:
+            stop_id, arrival_seconds, depart_seconds = tup
+            min_seconds = min(min_seconds, arrival_seconds, depart_seconds)
+        new_lst = tuple([(tup[0], tup[1] - min_seconds, tup[2] - min_seconds) for tup in stop_lst])
+        if new_lst in arrivals_reverse_map:
+            arrivals_id = arrivals_reverse_map[new_lst]
+        else:
+            arrivals_id = len(arrivals_map)
+            arrivals_map[arrivals_id] = new_lst
+            arrivals_reverse_map[new_lst] = arrivals_id
+        ret[trip_id] = (arrivals_id, min_seconds)
+
+    return ret, arrivals_map
+
+def write_stop_times_table(out_file, stop_times, trip_id_map):
+    out_file.write("CREATE TABLE stop_times (trip_id INTEGER, arrival_id INTEGER, offset INTEGER);\n")
+    for trip_id, tup in stop_times.items():
+        arrival_id, offset = tup
+        out_file.write("INSERT INTO stop_times VALUES (%d, %d, %d);\n" % (
+            trip_id_map[trip_id], arrival_id, offset
+        ))
+
+def write_arrivals_table(out_file, arrivals_map, stop_ids_map):
+    out_file.write("CREATE TABLE arrivals (id INTEGER, stop_id INTEGER, arrival INTEGER, departure INTEGER);\n")
+    for arrival_id, lst in arrivals_map.items():
+        for stop_id, arrival_seconds, departure_seconds in lst:
+            out_file.write("INSERT INTO arrivals VALUES (%d, %d, %d, %d);\n" % (
+                arrival_id, stop_ids_map[stop_id], arrival_seconds, departure_seconds
+            ))
 
 def main():
     parser = argparse.ArgumentParser(description='Parses GTFS data into general schedule')
@@ -108,7 +152,10 @@ def main():
         f.write("BEGIN TRANSACTION;\n")
         trip_ids_map = write_trip_ids_table(f, os.path.join(args.path, "trips.txt"))
         stop_ids_map = write_stop_ids_table(f, os.path.join(args.path, "stops.txt"))
-        write_stop_times_table(f, os.path.join(args.path, "stop_times.txt"), stop_ids_map, trip_ids_map)
+        stop_times = read_stop_times_table(os.path.join(args.path, "stop_times.txt"))
+        compressed_stop_times, arrivals_map = compress_stop_times_table(stop_times)
+        write_stop_times_table(f, compressed_stop_times, trip_ids_map)
+        write_arrivals_table(f, arrivals_map, stop_ids_map)
 
         f.write("END TRANSACTION;\n")
 
