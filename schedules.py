@@ -11,7 +11,7 @@ class Schedule:
         # mapping of stop -> (first stop, first schedule in compressed group)
         self.schedule_groups = {}
 
-    def add_time(self, arrival_time, stop: str):
+    def add_time(self, arrival_time, stop):
         if stop not in self.stops:
             self.stops[stop] = True
             self.schedules[stop] = StopSchedule(stop)
@@ -34,7 +34,7 @@ class Schedule:
             else:
                 self.schedule_groups[stop] = current_sched
 
-    def diff_as_string(self, x: "DiffList"):
+    def diff_as_string(self, x):
         if len(x) == 0:
             raise Exception("empty list")
         elif len(x) == 1:
@@ -65,12 +65,12 @@ class Schedule:
 
 class StopSchedule:
     """A compressed schedule for a stop"""
-    def __init__(self, stop: str):
+    def __init__(self, stop):
         self.pieces = []
         self.trip = None
         self.stop = stop
 
-    def diff(self, next_sched: "StopSchedule") -> "DiffList":
+    def diff(self, next_sched):
         if len(next_sched.pieces) != len(self.pieces):
             return None
 
@@ -90,7 +90,7 @@ class StopSchedule:
                 return None
         return current_diff
 
-    def add_time(self, arrival_time: int):
+    def add_time(self, arrival_time):
         i = 0
         for piece in self.pieces:
             start_time, inc, count = piece
@@ -122,7 +122,7 @@ class StopSchedule:
 
         self.pieces = new_pieces
 
-    def time_to_string(self, time: int) -> str:
+    def time_to_string(self, time):
         """Seconds from beginning of day to string"""
 
         hour = time / (60*60)

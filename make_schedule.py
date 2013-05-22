@@ -12,7 +12,7 @@ from schedules import (
     StopSchedule,
 )
 
-def parse_time(s: str) -> int:
+def parse_time(s):
     """Returns seconds from beginning of day. May go into tomorrow slightly"""
     hour, minute, second = s.split(":")
     hour = int(hour)
@@ -28,7 +28,7 @@ def parse_time(s: str) -> int:
     return second + 60*minute + 60*60*hour + 24*60*60*day
 
 
-def read_map(path: str, key: str) -> dict:
+def read_map(path, key):
     ret = {}
 
     with open(path) as f:
@@ -39,7 +39,7 @@ def read_map(path: str, key: str) -> dict:
 
     return ret
 
-def make_days(calendar, service) -> tuple:
+def make_days(calendar, service):
     row = calendar[service]
     return int(row["monday"]), int(row["tuesday"]), int(row["wednesday"]), int(row["thursday"]), int(row["friday"]), int(row["saturday"]), int(row["sunday"])
 
@@ -133,7 +133,7 @@ def parse(path):
 
     return ret_with_service, trips, calendar
 
-def weekdays_to_name(weekdays: tuple) -> str:
+def weekdays_to_name(weekdays):
     all_weekdays = weekdays[0] and weekdays[1] and weekdays[2] and weekdays[3] and weekdays[4]
 
     if all_weekdays:
