@@ -100,7 +100,7 @@ def compress_stop_times_table(stop_times):
     for trip_id, stop_lst in stop_times.items():
         min_seconds = 48 * 60 * 60
         for tup in stop_lst:
-            stop_id, arrival_seconds, depart_seconds = tup
+            _, _, arrival_seconds, depart_seconds = tup
             min_seconds = min(min_seconds, arrival_seconds, depart_seconds)
         new_lst = tuple([(tup[0], tup[1], tup[2] - min_seconds, tup[3] - min_seconds) for tup in stop_lst])
         if new_lst in arrivals_reverse_map:
