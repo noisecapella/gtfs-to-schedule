@@ -79,11 +79,12 @@ def read_stop_times_table(csv_path):
             stop_id = row[header["stop_id"]]
             arrival_seconds = parse_time(row[header["arrival_time"]])
             departure_seconds = parse_time(row[header["departure_time"]])
+            sequence = int(row[header["stop_sequence"]])
 
             m = ret[trip_id]
             if stop_id in m:
                 raise Exception("Stop id %s specified twice for a given trip %s" % (stop_id, trip_id))
-            tup = stop_id, arrival_seconds, departure_seconds
+            tup = stop_id, sequence, arrival_seconds, departure_seconds
             m.append(tup)
     return ret
 
@@ -101,7 +102,7 @@ def compress_stop_times_table(stop_times):
         for tup in stop_lst:
             stop_id, arrival_seconds, depart_seconds = tup
             min_seconds = min(min_seconds, arrival_seconds, depart_seconds)
-        new_lst = tuple([(tup[0], tup[1] - min_seconds, tup[2] - min_seconds) for tup in stop_lst])
+        new_lst = tuple([(tup[0], tup[1], tup[2] - min_seconds, tup[3] - min_seconds) for tup in stop_lst])
         if new_lst in arrivals_reverse_map:
             arrivals_id = arrivals_reverse_map[new_lst]
         else:
@@ -121,11 +122,12 @@ def write_stop_times_table(out_file, stop_times, trip_id_map):
         ))
 
 def write_arrivals_table(out_file, arrivals_map, stop_ids_map):
-    out_file.write("CREATE TABLE arrivals (id INTEGER, stop_id INTEGER, arrival INTEGER, departure INTEGER);\n")
+    out_file.write("CREATE TABLE arrivals (id INTEGER, sequence_id INTEGER,"
+                   " stop_id INTEGER, arrival_seconds INTEGER);\n")
     for arrival_id, lst in arrivals_map.items():
-        for stop_id, arrival_seconds, departure_seconds in lst:
+        for stop_id, sequence, arrival_seconds, departure_seconds in lst:
             out_file.write("INSERT INTO arrivals VALUES (%d, %d, %d, %d);\n" % (
-                arrival_id, stop_ids_map[stop_id], arrival_seconds, departure_seconds
+                arrival_id, sequence, stop_ids_map[stop_id], arrival_seconds
             ))
 
 def main():
