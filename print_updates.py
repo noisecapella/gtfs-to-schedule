@@ -21,7 +21,7 @@ def print_updates(args):
     trip_id_to_delays = defaultdict(list)
     trip_ids = set()
     for entity in update.entity:
-        trip_id = entity.trip_update.trip.trip_id
+        trip_id = str(entity.trip_update.trip.trip_id)
         trip_ids.add(trip_id)
         for stop_time_update in entity.trip_update.stop_time_update:
             # TODO: error-check for lack of arrival.delay
@@ -49,6 +49,8 @@ def print_updates(args):
 
     for offset, arrival_seconds, stop_id, route_id, trip_id, sequence_id in results:
         current_delay = 0
+        trip_id = str(trip_id)
+        stop_id = str(stop_id)
         if trip_id in trip_id_to_delays:
             for stop_sequence, delay in trip_id_to_delays[trip_id]:
                 if stop_sequence > sequence_id:
@@ -56,8 +58,8 @@ def print_updates(args):
                 current_delay = delay
 
 
-        tup = (offset + arrival_seconds, route_id, current_delay, trip_id)
-        stop_results[str(stop_id)].append(tup)
+        tup = (offset + arrival_seconds, route_id, current_delay, trip_id, sequence_id)
+        stop_results[stop_id].append(tup)
 
 
     now = datetime.now()
@@ -66,7 +68,8 @@ def print_updates(args):
 
     if args.stop_id in stop_results:
         lst = stop_results[args.stop_id]
-        new_lst = [(seconds, route_id, delay, trip_id) for (seconds, route_id, delay, trip_id) in lst
+        new_lst = [(seconds, route_id, delay, trip_id, sequence_id)
+                   for (seconds, route_id, delay, trip_id, sequence_id) in lst
                    if (seconds + delay) > now_seconds]
 
         new_lst = sorted(new_lst, key=lambda x: x[0] + x[2])
@@ -74,12 +77,14 @@ def print_updates(args):
         if len(new_lst) == 0:
             print("No arrivals for %s" % args.stop_id)
         else:
-            for seconds, route_id, delay, trip_id in new_lst:
-                print("Next arrival for %s on route %s is at %s with delay %d on trip %s" % (args.stop_id,
-                                                                                  route_id,
-                                                                                  time_to_string(seconds),
-                                                                                  delay,
-                                                                                  trip_id))
+            for seconds, route_id, delay, trip_id, sequence_id in new_lst:
+                print("Next arrival for stop %s (sequence %d) on"
+                      " route %s is at %s with delay %d on trip %s" % (args.stop_id,
+                                                                       sequence_id,
+                                                                       route_id,
+                                                                       time_to_string(seconds),
+                                                                       delay,
+                                                                       trip_id))
     else:
         print("%s is not in any of the trips specified by the SQL query" % args.stop_id)
 
