@@ -18,8 +18,17 @@ def print_updates(args):
     update = gtfs_realtime_pb2.FeedMessage()
     update.ParseFromString(data)
 
-    trip_ids = [entity.trip_update.trip.trip_id for entity in update.entity]
-
+    trip_id_to_delays = defaultdict(list)
+    trip_ids = set()
+    for entity in update.entity:
+        trip_id = entity.trip_update.trip.trip_id
+        trip_ids.add(trip_id)
+        for stop_time_update in entity.trip_update.stop_time_update:
+            # TODO: error-check for lack of arrival.delay
+            tup = stop_time_update.stop_sequence, stop_time_update.arrival.delay
+            trip_id_to_delays[trip_id].append(tup)
+        if trip_id in trip_id_to_delays:
+            trip_id_to_delays[trip_id] = sorted(trip_id_to_delays[trip_id], key=itemgetter(0))
 
 
 
@@ -28,7 +37,8 @@ def print_updates(args):
     # injection risk here! SQLite can't handle this many parameters, though
     trip_ids_str = ", ".join(("'%s'" % x) for x in trip_ids)
 
-    query = ('SELECT stop_times.offset, arrivals.arrival_seconds, stop_ids.stop_id, trip_ids.route_id '
+    query = ('SELECT stop_times.offset, arrivals.arrival_seconds, '
+             'stop_ids.stop_id, trip_ids.route_id, trip_ids.trip_id, arrivals.sequence_id '
              'FROM trip_ids '
              'JOIN stop_times ON stop_times.trip_id = trip_ids.id AND trip_ids.trip_id IN (%s) '
              'JOIN arrivals ON arrivals.id = stop_times.arrival_id '
@@ -37,8 +47,16 @@ def print_updates(args):
 
     stop_results = defaultdict(list)
 
-    for offset, arrival_seconds, stop_id, route_id in results:
-        tup = (offset + arrival_seconds, route_id)
+    for offset, arrival_seconds, stop_id, route_id, trip_id, sequence_id in results:
+        current_delay = 0
+        if trip_id in trip_id_to_delays:
+            for stop_sequence, delay in trip_id_to_delays[trip_id]:
+                if stop_sequence > sequence_id:
+                    break
+                current_delay = delay
+
+
+        tup = (offset + arrival_seconds, route_id, current_delay, trip_id)
         stop_results[str(stop_id)].append(tup)
 
 
@@ -48,18 +66,20 @@ def print_updates(args):
 
     if args.stop_id in stop_results:
         lst = stop_results[args.stop_id]
-        new_lst = [(seconds, route_id) for (seconds, route_id) in lst
-                   if seconds > now_seconds]
+        new_lst = [(seconds, route_id, delay, trip_id) for (seconds, route_id, delay, trip_id) in lst
+                   if (seconds + delay) > now_seconds]
 
-        new_lst = sorted(new_lst, key=itemgetter(0))
+        new_lst = sorted(new_lst, key=lambda x: x[0] + x[2])
 
         if len(new_lst) == 0:
             print("No arrivals for %s" % args.stop_id)
         else:
-            for seconds, route_id in new_lst:
-                print("Next arrival for %s on route %s is at %s" % (args.stop_id,
-                                                                    route_id,
-                                                                    time_to_string(seconds)))
+            for seconds, route_id, delay, trip_id in new_lst:
+                print("Next arrival for %s on route %s is at %s with delay %d on trip %s" % (args.stop_id,
+                                                                                  route_id,
+                                                                                  time_to_string(seconds),
+                                                                                  delay,
+                                                                                  trip_id))
     else:
         print("%s is not in any of the trips specified by the SQL query" % args.stop_id)
 
