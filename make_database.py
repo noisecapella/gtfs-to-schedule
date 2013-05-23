@@ -51,7 +51,7 @@ def write_stop_ids_table(out_file, csv_path):
 
 def write_trip_ids_table(out_file, csv_path):
     ret = {}
-    out_file.write("CREATE TABLE trip_ids (id INTEGER PRIMARY KEY, trip_id STRING);\n")
+    out_file.write("CREATE TABLE trip_ids (id INTEGER PRIMARY KEY, trip_id STRING, route_id STRING);\n")
     count = 0
     with open(csv_path) as csv_file:
         reader = csv.reader(csv_file)
@@ -59,7 +59,8 @@ def write_trip_ids_table(out_file, csv_path):
         header = make_index_map(next(reader))
         for row in reader:
             trip_id = row[header["trip_id"]]
-            out_file.write("INSERT INTO trip_ids VALUES (%d, '%s');\n" % (count, trip_id))
+            route_id = row[header["route_id"]]
+            out_file.write("INSERT INTO trip_ids VALUES (%d, '%s', '%s');\n" % (count, trip_id, route_id))
             if trip_id in ret:
                 raise Exception("Duplicate trip: %s" % trip_id)
             ret[trip_id] = count

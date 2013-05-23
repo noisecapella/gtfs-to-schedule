@@ -122,18 +122,6 @@ class StopSchedule:
 
         self.pieces = new_pieces
 
-    def time_to_string(self, time):
-        """Seconds from beginning of day to string"""
-
-        hour = time / (60*60)
-        time -= hour*60*60
-
-        minute = time/60
-        time -= minute*60
-
-        second = time
-
-        return "%02d:%02d:%02d" % (hour, minute, second)
 
     def __str__(self):
         ret = ""
@@ -141,7 +129,19 @@ class StopSchedule:
         for piece in self.pieces:
             start_time, inc, count = piece
             ret += "        start at %s, repeat every %d minutes %d times\n" %\
-                   (self.time_to_string(start_time), inc/60, count)
+                   (time_to_string(start_time), inc/60, count)
 
         return ret
 
+def time_to_string(time):
+    """Seconds from beginning of day to string"""
+
+    hour = time / (60*60)
+    time -= hour*60*60
+
+    minute = time/60
+    time -= minute*60
+
+    second = time
+
+    return "%02d:%02d:%02d" % (hour, minute, second)
