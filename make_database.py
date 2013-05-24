@@ -91,45 +91,64 @@ def read_stop_times_table(csv_path):
 
 
 def compress_stop_times_table(stop_times):
+    """this iterates through stop_times,
+    which is trip_id -> list of (stop_id, sequence, arrival_seconds, depart_seconds)
+
+    It looks for a set of times which are all the same difference from each other and stores that
+    in arrivals_map. Many trips may use the same arrivals_map. Stops are stored
+
+    it returns three maps:
+    ret is trip_id -> arrivals_id, stop_list_id, offset
+    """
 
     ret = {}
     arrivals_map = {}
     arrivals_reverse_map = {}
+    stops_map = {}
+    stops_reverse_map = {}
+
+
     for trip_id, stop_lst in stop_times.items():
         min_seconds = 48 * 60 * 60
         for tup in stop_lst:
-            _, _, arrival_seconds, depart_seconds = tup
+            stop_id, sequence, arrival_seconds, depart_seconds = tup
             min_seconds = min(min_seconds, arrival_seconds, depart_seconds)
-        new_lst = tuple([(tup[0], tup[1], tup[2] - min_seconds, tup[3] - min_seconds) for tup in stop_lst])
-        if new_lst in arrivals_reverse_map:
-            arrivals_id = arrivals_reverse_map[new_lst]
+        new_arrivals_lst = tuple([(tup[2] - min_seconds, tup[3] - min_seconds) for tup in stop_lst])
+        new_stop_lst = tuple([(tup[0], tup[1]) for tup in stop_lst])
+        if new_arrivals_lst in arrivals_reverse_map:
+            arrivals_id = arrivals_reverse_map[new_arrivals_lst]
         else:
             arrivals_id = len(arrivals_map)
-            arrivals_map[arrivals_id] = new_lst
-            arrivals_reverse_map[new_lst] = arrivals_id
-        ret[trip_id] = (arrivals_id, min_seconds)
+            arrivals_map[arrivals_id] = new_arrivals_lst
+            arrivals_reverse_map[new_arrivals_lst] = arrivals_id
 
-    return ret, arrivals_map
+        if new_stop_lst in stops_reverse_map:
+            stop_list_id = stops_reverse_map[new_stop_lst]
+        else:
+            stop_list_id = len(stops_map)
+            stops_map[stop_list_id] = new_stop_lst
+            stops_reverse_map[new_stop_lst] = stop_list_id
+
+        ret[trip_id] = (arrivals_id, stop_list_id, min_seconds)
+
+    return ret, arrivals_map, stops_map
 
 def write_stop_times_table(out_file, stop_times, trip_id_map):
-    out_file.write("CREATE TABLE stop_times (trip_id INTEGER, arrival_id INTEGER, offset INTEGER);\n")
+    out_file.write("CREATE TABLE stop_times (trip_id INTEGER, arrival_id INTEGER,"
+                   " stop_list_id INTEGER, offset INTEGER);\n")
     for trip_id, tup in stop_times.items():
-        arrival_id, offset = tup
-        out_file.write("INSERT INTO stop_times VALUES (%d, %d, %d);\n" % (
-            trip_id_map[trip_id], arrival_id, offset
+        arrival_id, stop_list_id, offset = tup
+        out_file.write("INSERT INTO stop_times VALUES (%d, %d, %d, %d);\n" % (
+            trip_id_map[trip_id], arrival_id, stop_list_id, offset
         ))
 
-def write_arrivals_table(out_file, arrivals_map, stop_ids_map):
+def write_arrivals_table(out_file, arrivals_map):
     out_file.write("CREATE TABLE arrivals (id INTEGER PRIMARY KEY, blob STRING);\n")
     for arrival_id, lst in arrivals_map.items():
         box = Box()
         box.add_short(len(lst))
 
-        for stop_id, sequence, arrival_seconds, departure_seconds in lst:
-            box.add_short(stop_ids_map[stop_id])
-            if sequence > 0xff or sequence < 0:
-                raise Exception("sequence out of range")
-            box.add_byte(sequence)
+        for arrival_seconds, departure_seconds in lst:
             if arrival_seconds % 60 != 0:
                 raise Exception("arrival_seconds % 60 != 0")
             if (arrival_seconds / 60) > 0xffff or arrival_seconds < 0:
@@ -139,6 +158,20 @@ def write_arrivals_table(out_file, arrivals_map, stop_ids_map):
 
         out_file.write("INSERT INTO arrivals VALUES (%d, %s);\n" % (
             arrival_id, box.get_blob_string()
+        ))
+
+def write_stop_list_table(out_file, stop_list_map, stop_ids_map):
+    out_file.write("CREATE TABLE trip_stops (id INTEGER PRIMARY KEY, blob STRING);\n")
+    for stop_list_id, lst in stop_list_map.items():
+        box = Box()
+        box.add_short(len(lst))
+
+        for stop_id, sequence in lst:
+            box.add_short(stop_ids_map[stop_id])
+            box.add_byte(sequence)
+
+        out_file.write("INSERT INTO trip_stops VALUES (%d, %s);\n" % (
+            stop_list_id, box.get_blob_string()
         ))
 
 def main():
@@ -161,9 +194,10 @@ def main():
         trip_ids_map = write_trip_ids_table(f, os.path.join(args.path, "trips.txt"))
         stop_ids_map = write_stop_ids_table(f, os.path.join(args.path, "stops.txt"))
         stop_times = read_stop_times_table(os.path.join(args.path, "stop_times.txt"))
-        compressed_stop_times, arrivals_map = compress_stop_times_table(stop_times)
+        compressed_stop_times, arrivals_map, stop_list_map = compress_stop_times_table(stop_times)
         write_stop_times_table(f, compressed_stop_times, trip_ids_map)
-        write_arrivals_table(f, arrivals_map, stop_ids_map)
+        write_arrivals_table(f, arrivals_map)
+        write_stop_list_table(f, stop_list_map, stop_ids_map)
 
         f.write("END TRANSACTION;\n")
 

@@ -48,22 +48,28 @@ def print_updates(args):
     stop_id_map = get_stop_id_map(cur)
 
     query = ('SELECT stop_times.offset, arrivals.blob, '
-             'trip_ids.route_id, trip_ids.trip_id '
+             'trip_ids.route_id, trip_ids.trip_id, trip_stops.blob '
              'FROM trip_ids '
              'JOIN stop_times ON stop_times.trip_id = trip_ids.id AND trip_ids.trip_id IN (%s) '
-             'JOIN arrivals ON arrivals.id = stop_times.arrival_id ') % trip_ids_str
+             'JOIN arrivals ON arrivals.id = stop_times.arrival_id '
+             'JOIN trip_stops ON trip_stops.id = stop_times.stop_list_id ') % trip_ids_str
     results = cur.execute(query)
 
     stop_results = defaultdict(list)
 
-    for offset, arrivals_blob_str, route_id, trip_id in results:
+    for offset, arrivals_blob_str, route_id, trip_id, stop_list_blob_str in results:
         trip_id = str(trip_id)
+
         arrivals_blob = Box(arrivals_blob_str)
         arrivals_len = arrivals_blob.read_short()
+
+        stop_list_blob = Box(stop_list_blob_str)
+        stop_list_len = stop_list_blob.read_short()
+
         for i in xrange(arrivals_len):
             current_delay = 0
-            stop_id_int = arrivals_blob.read_short()
-            sequence_id = arrivals_blob.read_byte()
+            stop_id_int = stop_list_blob.read_short()
+            sequence_id = stop_list_blob.read_byte()
             arrival_minutes = arrivals_blob.read_short()
 
             stop_id = stop_id_map[stop_id_int]
