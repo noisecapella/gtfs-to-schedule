@@ -8,6 +8,16 @@ Requirements
 
 * GTFS data for your particular stop needs to be downloaded and unzipped into a directory
 * `print_updates.py` is currently hardcoded to the MBTA's GTFS-realtime feed, you might want to change this for other transit agencies.
+* Use pip to install the dependencies: `pip install -r requirements.txt`. These requirements are currently	protobuf and Twisted
+* python 2.7 or later is required due to the dependency on argparse. I tried getting this to work with python 3 but that a python 3 version of protobuf.
+
+Usage
+-----
+
+To create a database and download some transit predictions:
+* `python make_database.py path_to_gtfs_dir database.sql`
+* `sqlite3 database.db < database.sql`
+* `python print_updates.py database.db 8178`
 
 Pieces
 ------
