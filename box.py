@@ -35,9 +35,12 @@ class Box:
         return struct.unpack('>B', s)[0]
 
     def read_string(self):
-        l = self.read_byte()
-        chunk = self.bytes[self.pos:self.pos+l]
-        self.pos += l
+        # adapted from http://stackoverflow.com/questions/1393004/java-modified-utf-8-strings-in-python
+        length = struct.unpack('!H', self.bytes[self.pos:self.pos+2])
+        self.pos += 2
+        format = '!' + str(length) + 's'
+        chunk = struct.unpack(format, self.bytes[self.pos:self.pos+length])
+        self.pos += length
         return chunk
 
     def add_string(self, s):
@@ -45,8 +48,13 @@ class Box:
             raise Exception("Invalid type: %s" % str(type(s)))
         if len(s) > 0xff:
             raise Exception("String too long")
-        self.add_byte(len(s))
-        self.bytes += self.to_str(binascii.b2a_hex(s))
+
+        # adapted from http://stackoverflow.com/questions/1393004/java-modified-utf-8-strings-in-python
+        utf8 = s.encode('utf-8')
+        length = len(utf8)
+        self.bytes += struct.pack('!H', length)
+        format = '!' + str(length) + 's'
+        self.bytes += struct.pack(format, utf8)
 
     def add_short(self, x):
         if x < 0 or x > 0xffff:

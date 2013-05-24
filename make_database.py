@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 
-from make_schedule import parse
 import argparse
 import os
 import csv
@@ -8,17 +7,9 @@ from collections import defaultdict
 
 from box import Box
 
-from make_schedule import (
-    make_days,
-    make_days_hash,
+from util import (
     parse_time,
     )
-
-from schedules import (
-    StopSchedule,
-    Schedule,
-
-)
 
 def escaped(s):
     return s.replace("'", "''")
@@ -34,7 +25,7 @@ def make_index_map(array):
 
 def write_trip_ids_table(out_file, csv_path):
     ret = {}
-    out_file.write("CREATE TABLE trip_ids (id INTEGER PRIMARY KEY, trip_id STRING, route_id STRING);\n")
+    out_file.write("CREATE TABLE IF NOT EXISTS trip_ids (id INTEGER PRIMARY KEY, trip_id STRING, route_id STRING);\n")
     count = 0
     with open(csv_path) as csv_file:
         reader = csv.reader(csv_file)
@@ -42,8 +33,13 @@ def write_trip_ids_table(out_file, csv_path):
         header = make_index_map(next(reader))
         for row in reader:
             trip_id = row[header["trip_id"]]
+            if "'" in trip_id:
+                # this complicates things on the Java side so
+                # if this happens we need to be aware of it
+                raise Exception("Trip id has a apostrophe")
+
             route_id = row[header["route_id"]]
-            out_file.write("INSERT INTO trip_ids VALUES (%d, '%s', '%s');\n" % (count, trip_id, route_id))
+            out_file.write("INSERT INTO trip_ids VALUES (%d, '%s', '%s');\n" % (count, trip_id, escaped(route_id)))
             if trip_id in ret:
                 raise Exception("Duplicate trip: %s" % trip_id)
             ret[trip_id] = count
@@ -117,7 +113,7 @@ def compress_stop_times_table(stop_times):
     return ret, arrivals_map, stops_map
 
 def write_stop_times_table(out_file, stop_times, trip_id_map):
-    out_file.write("CREATE TABLE stop_times (trip_id INTEGER, arrival_id INTEGER,"
+    out_file.write("CREATE TABLE IF NOT EXISTS stop_times (trip_id INTEGER, arrival_id INTEGER,"
                    " stop_list_id INTEGER, offset INTEGER);\n")
     for trip_id, tup in stop_times.items():
         arrival_id, stop_list_id, offset = tup
@@ -126,7 +122,7 @@ def write_stop_times_table(out_file, stop_times, trip_id_map):
         ))
 
 def write_arrivals_table(out_file, arrivals_map):
-    out_file.write("CREATE TABLE arrivals (id INTEGER PRIMARY KEY, blob STRING);\n")
+    out_file.write("CREATE TABLE IF NOT EXISTS arrivals (id INTEGER PRIMARY KEY, blob STRING);\n")
     for arrival_id, lst in arrivals_map.items():
         box = Box()
         box.add_short(len(lst))
@@ -144,7 +140,7 @@ def write_arrivals_table(out_file, arrivals_map):
         ))
 
 def write_stop_list_table(out_file, stop_list_map):
-    out_file.write("CREATE TABLE trip_stops (id INTEGER PRIMARY KEY, blob STRING);\n")
+    out_file.write("CREATE TABLE IF NOT EXISTS trip_stops (id INTEGER PRIMARY KEY, blob STRING);\n")
     for stop_list_id, lst in stop_list_map.items():
         box = Box()
         box.add_short(len(lst))
