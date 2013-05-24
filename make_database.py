@@ -91,9 +91,6 @@ def read_stop_times_table(csv_path):
 
 
 def compress_stop_times_table(stop_times):
-    # stop_times is return value of read_stop_times_table
-    # returns (arrivals_map, trip_id -> (seconds, Arrivals))
-    # where arrivals_map is arrival_id -> Arrival
 
     ret = {}
     arrivals_map = {}
