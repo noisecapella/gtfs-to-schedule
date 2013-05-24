@@ -32,23 +32,6 @@ def make_index_map(array):
         ret[item] = i
     return ret
 
-def write_stop_ids_table(out_file, csv_path):
-    ret = {}
-    out_file.write("CREATE TABLE stop_ids (id INTEGER PRIMARY KEY, stop_id STRING);\n")
-    count = 0
-    with open(csv_path) as csv_file:
-        reader = csv.reader(csv_file)
-
-        header = make_index_map(next(reader))
-        for row in reader:
-            stop_id = row[header["stop_id"]]
-            out_file.write("INSERT INTO stop_ids VALUES (%d, '%s');\n" % (count, stop_id))
-            if stop_id in ret:
-                raise Exception("Duplicate stop: %s" % stop_id)
-            ret[stop_id] = count
-            count += 1
-    return ret
-
 def write_trip_ids_table(out_file, csv_path):
     ret = {}
     out_file.write("CREATE TABLE trip_ids (id INTEGER PRIMARY KEY, trip_id STRING, route_id STRING);\n")
@@ -160,14 +143,14 @@ def write_arrivals_table(out_file, arrivals_map):
             arrival_id, box.get_blob_string()
         ))
 
-def write_stop_list_table(out_file, stop_list_map, stop_ids_map):
+def write_stop_list_table(out_file, stop_list_map):
     out_file.write("CREATE TABLE trip_stops (id INTEGER PRIMARY KEY, blob STRING);\n")
     for stop_list_id, lst in stop_list_map.items():
         box = Box()
         box.add_short(len(lst))
 
         for stop_id, sequence in lst:
-            box.add_short(stop_ids_map[stop_id])
+            box.add_string(stop_id)
             box.add_byte(sequence)
 
         out_file.write("INSERT INTO trip_stops VALUES (%d, %s);\n" % (
@@ -192,12 +175,11 @@ def main():
     with open(args.output_file, "w") as f:
         f.write("BEGIN TRANSACTION;\n")
         trip_ids_map = write_trip_ids_table(f, os.path.join(args.path, "trips.txt"))
-        stop_ids_map = write_stop_ids_table(f, os.path.join(args.path, "stops.txt"))
         stop_times = read_stop_times_table(os.path.join(args.path, "stop_times.txt"))
         compressed_stop_times, arrivals_map, stop_list_map = compress_stop_times_table(stop_times)
         write_stop_times_table(f, compressed_stop_times, trip_ids_map)
         write_arrivals_table(f, arrivals_map)
-        write_stop_list_table(f, stop_list_map, stop_ids_map)
+        write_stop_list_table(f, stop_list_map)
 
         f.write("END TRANSACTION;\n")
 

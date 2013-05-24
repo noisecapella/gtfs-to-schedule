@@ -9,16 +9,13 @@ from datetime import datetime
 from schedules import time_to_string
 from box import Box
 
+
 from twisted.internet import reactor
 from twisted.internet.defer import inlineCallbacks
 from twisted.web.client import getPage
 
-def get_stop_id_map(cur):
-    stop_ids = {}
-    results = cur.execute("SELECT stop_id, id FROM stop_ids")
-    for stop_id, id in results:
-        stop_ids[id] = str(stop_id)
-    return stop_ids
+def escaped(s):
+    return s.replace("'", "''")
 
 @inlineCallbacks
 def print_updates(args):
@@ -43,9 +40,7 @@ def print_updates(args):
     con = sqlite3.connect(args.db)
     cur = con.cursor()
     # injection risk here! SQLite can't handle this many parameters, though
-    trip_ids_str = ", ".join(("'%s'" % x) for x in trip_ids)
-
-    stop_id_map = get_stop_id_map(cur)
+    trip_ids_str = ", ".join(("'%s'" % escaped(x)) for x in trip_ids)
 
     query = ('SELECT stop_times.offset, arrivals.blob, '
              'trip_ids.route_id, trip_ids.trip_id, trip_stops.blob '
@@ -68,11 +63,10 @@ def print_updates(args):
 
         for i in xrange(arrivals_len):
             current_delay = 0
-            stop_id_int = stop_list_blob.read_short()
+            stop_id = stop_list_blob.read_string()
             sequence_id = stop_list_blob.read_byte()
             arrival_minutes = arrivals_blob.read_short()
 
-            stop_id = stop_id_map[stop_id_int]
             if trip_id in trip_id_to_delays[trip_id]:
                 for stop_sequence, delay in trip_id_to_delays[trip_id]:
                     if stop_sequence > sequence_id:

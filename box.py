@@ -34,6 +34,20 @@ class Box:
         self.pos += 1
         return struct.unpack('>B', s)[0]
 
+    def read_string(self):
+        l = self.read_byte()
+        chunk = self.bytes[self.pos:self.pos+l]
+        self.pos += l
+        return chunk
+
+    def add_string(self, s):
+        if type(s) != str:
+            raise Exception("Invalid type: %s" % str(type(s)))
+        if len(s) > 0xff:
+            raise Exception("String too long")
+        self.add_byte(len(s))
+        self.bytes += self.to_str(binascii.b2a_hex(s))
+
     def add_short(self, x):
         if x < 0 or x > 0xffff:
             raise Exception("x out of range")
@@ -60,4 +74,5 @@ class Box:
 
     def get_blob_string(self):
         return "X'" + self.bytes + "'"
+
 
