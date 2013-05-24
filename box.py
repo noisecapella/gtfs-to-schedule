@@ -52,9 +52,9 @@ class Box:
         # adapted from http://stackoverflow.com/questions/1393004/java-modified-utf-8-strings-in-python
         utf8 = s.encode('utf-8')
         length = len(utf8)
-        self.bytes += struct.pack('!H', length)
+        self.bytes += self.to_str(binascii.b2a_hex(struct.pack('!H', length)))
         format = '!' + str(length) + 's'
-        self.bytes += struct.pack(format, utf8)
+        self.bytes += self.to_str(binascii.b2a_hex(struct.pack(format, utf8)))
 
     def add_short(self, x):
         if x < 0 or x > 0xffff:
