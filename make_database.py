@@ -123,13 +123,26 @@ def write_stop_times_table(out_file, stop_times, trip_id_map):
         ))
 
 def write_arrivals_table(out_file, arrivals_map, stop_ids_map):
-    out_file.write("CREATE TABLE arrivals (id INTEGER, sequence_id INTEGER,"
-                   " stop_id INTEGER, arrival_seconds INTEGER);\n")
+    out_file.write("CREATE TABLE arrivals (id INTEGER PRIMARY KEY, blob STRING);\n")
     for arrival_id, lst in arrivals_map.items():
+        box = Box()
+        box.add_short(len(lst))
+
         for stop_id, sequence, arrival_seconds, departure_seconds in lst:
-            out_file.write("INSERT INTO arrivals VALUES (%d, %d, %d, %d);\n" % (
-                arrival_id, sequence, stop_ids_map[stop_id], arrival_seconds
-            ))
+            box.add_short(stop_ids_map[stop_id])
+            if sequence > 0xff or sequence < 0:
+                raise Exception("sequence out of range")
+            box.add_byte(sequence)
+            if arrival_seconds % 60 != 0:
+                raise Exception("arrival_seconds % 60 != 0")
+            if (arrival_seconds / 60) > 0xffff or arrival_seconds < 0:
+                raise Exception("arrival_seconds out of range")
+            box.add_short(arrival_seconds/60)
+            #box.add_int(departure_seconds)
+
+        out_file.write("INSERT INTO arrivals VALUES (%d, %s);\n" % (
+            arrival_id, box.get_blob_string()
+        ))
 
 def main():
     parser = argparse.ArgumentParser(description='Parses GTFS data into general schedule')

@@ -7,10 +7,18 @@ from collections import defaultdict
 from operator import itemgetter
 from datetime import datetime
 from schedules import time_to_string
+from box import Box
 
 from twisted.internet import reactor
 from twisted.internet.defer import inlineCallbacks
 from twisted.web.client import getPage
+
+def get_stop_id_map(cur):
+    stop_ids = {}
+    results = cur.execute("SELECT stop_id, id FROM stop_ids")
+    for stop_id, id in results:
+        stop_ids[id] = str(stop_id)
+    return stop_ids
 
 @inlineCallbacks
 def print_updates(args):
@@ -37,29 +45,37 @@ def print_updates(args):
     # injection risk here! SQLite can't handle this many parameters, though
     trip_ids_str = ", ".join(("'%s'" % x) for x in trip_ids)
 
-    query = ('SELECT stop_times.offset, arrivals.arrival_seconds, '
-             'stop_ids.stop_id, trip_ids.route_id, trip_ids.trip_id, arrivals.sequence_id '
+    stop_id_map = get_stop_id_map(cur)
+
+    query = ('SELECT stop_times.offset, arrivals.blob, '
+             'trip_ids.route_id, trip_ids.trip_id '
              'FROM trip_ids '
              'JOIN stop_times ON stop_times.trip_id = trip_ids.id AND trip_ids.trip_id IN (%s) '
-             'JOIN arrivals ON arrivals.id = stop_times.arrival_id '
-             'JOIN stop_ids ON arrivals.stop_id = stop_ids.id ') % trip_ids_str
+             'JOIN arrivals ON arrivals.id = stop_times.arrival_id ') % trip_ids_str
     results = cur.execute(query)
 
     stop_results = defaultdict(list)
 
-    for offset, arrival_seconds, stop_id, route_id, trip_id, sequence_id in results:
-        current_delay = 0
+    for offset, arrivals_blob_str, route_id, trip_id in results:
         trip_id = str(trip_id)
-        stop_id = str(stop_id)
-        if trip_id in trip_id_to_delays:
-            for stop_sequence, delay in trip_id_to_delays[trip_id]:
-                if stop_sequence > sequence_id:
-                    break
-                current_delay = delay
+        arrivals_blob = Box(arrivals_blob_str)
+        arrivals_len = arrivals_blob.read_short()
+        for i in xrange(arrivals_len):
+            current_delay = 0
+            stop_id_int = arrivals_blob.read_short()
+            sequence_id = arrivals_blob.read_byte()
+            arrival_minutes = arrivals_blob.read_short()
 
+            stop_id = stop_id_map[stop_id_int]
+            if trip_id in trip_id_to_delays[trip_id]:
+                for stop_sequence, delay in trip_id_to_delays[trip_id]:
+                    if stop_sequence > sequence_id:
+                        break
+                    current_delay = delay
 
-        tup = (offset + arrival_seconds, route_id, current_delay, trip_id, sequence_id)
-        stop_results[stop_id].append(tup)
+            arrival_seconds = arrival_minutes * 60
+            tup = (offset + arrival_seconds, route_id, current_delay, trip_id, sequence_id)
+            stop_results[stop_id].append(tup)
 
 
     now = datetime.now()
@@ -79,11 +95,12 @@ def print_updates(args):
         else:
             for seconds, route_id, delay, trip_id, sequence_id in new_lst:
                 print("Next arrival for stop %s (sequence %d) on"
-                      " route %s is at %s with delay %d on trip %s" % (args.stop_id,
+                      " route %s is at %s with delay %d (total %s) on trip %s" % (args.stop_id,
                                                                        sequence_id,
                                                                        route_id,
                                                                        time_to_string(seconds),
                                                                        delay,
+                                                                       time_to_string(seconds + delay),
                                                                        trip_id))
     else:
         print("%s is not in any of the trips specified by the SQL query" % args.stop_id)
