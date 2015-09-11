@@ -146,8 +146,12 @@ def write_stop_list_table(out_file, stop_list_map):
         box.add_short(len(lst))
 
         for stop_id, sequence in lst:
-            box.add_string(stop_id)
-            box.add_byte(sequence)
+            try:
+                box.add_string(stop_id)
+                box.add_short(sequence)
+            except:
+                print((stop_id, sequence))
+                raise
 
         out_file.write("INSERT INTO trip_stops VALUES (%d, %s);\n" % (
             stop_list_id, box.get_blob_string()

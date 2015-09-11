@@ -64,7 +64,7 @@ def print_updates(args):
         for i in xrange(arrivals_len):
             current_delay = 0
             stop_id = stop_list_blob.read_string()
-            sequence_id = stop_list_blob.read_byte()
+            sequence_id = stop_list_blob.read_short()
             arrival_minutes = arrivals_blob.read_short()
 
             if trip_id in trip_id_to_delays[trip_id]:
